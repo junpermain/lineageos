@@ -27,6 +27,22 @@ jobs:
           git config --global user.name "你的GitHub用户名"
           git config --global user.email "你的GitHub邮箱"
 
+      - name: Set up ccache
+        run: |
+          apt install -y ccache
+          echo "export USE_CCACHE=1" >> ~/.bashrc
+          echo "export CCACHE_DIR=~/.ccache" >> ~/.bashrc
+          source ~/.bashrc
+          ccache -M 50G
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ${{ runner.os }}-ccache-${{ hashFiles('**/*.mk') }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-
+
       - name: Initialize LineageOS repo
         run: |
           mkdir -p ~/android/lineage
@@ -63,17 +79,3 @@ jobs:
         with:
           name: lineage-build
           path: ~/android/lineage/out/target/product/earth/*.zip
-- name: Set up ccache
-  run: |
-    apt install -y ccache
-    echo "export USE_CCACHE=1" >> ~/.bashrc
-    echo "export CCACHE_DIR=~/.ccache" >> ~/.bashrc
-    source ~/.bashrc
-    ccache -M 50G
-- name: Cache ccache
-  uses: actions/cache@v4
-  with:
-    path: ~/.ccache
-    key: ${{ runner.os }}-ccache-${{ hashFiles('**/*.mk') }}
-    restore-keys: |
-      ${{ runner.os }}-ccache-
