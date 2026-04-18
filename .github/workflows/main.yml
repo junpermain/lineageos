@@ -1,0 +1,79 @@
+name: Build LineageOS
+
+# 触发条件：手动触发 + 定时触发（可选）
+on:
+  workflow_dispatch:  # 允许在 GitHub 页面手动点击运行
+  schedule:
+    - cron: '0 0 * * 0'  # 每周日 0 点自动构建（可选）
+
+jobs:
+  build:
+    runs-on: ubuntu-latest  # 使用 Ubuntu 环境
+    container:
+      image: ubuntu:20.04  # 和官方编译指南一致的系统版本
+
+    steps:
+      - name: Install dependencies
+        run: |
+          apt update && apt install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git git-lfs gnupg gperf imagemagick lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev
+
+      - name: Set up repo
+        run: |
+          curl https://storage.googleapis.com/git-repo-downloads/repo > /usr/bin/repo
+          chmod a+x /usr/bin/repo
+
+      - name: Configure git
+        run: |
+          git config --global user.name "你的GitHub用户名"
+          git config --global user.email "你的GitHub邮箱"
+
+      - name: Initialize LineageOS repo
+        run: |
+          mkdir -p ~/android/lineage
+          cd ~/android/lineage
+          repo init -u https://github.com/LineageOS/android.git -b lineage-22.2 --git-lfs
+
+      - name: Sync source code
+        run: |
+          cd ~/android/lineage
+          repo sync -j$(nproc) -c
+
+      - name: Set up environment
+        run: |
+          cd ~/android/lineage
+          source build/envsetup.sh
+
+      - name: Download device tree
+        run: |
+          cd ~/android/lineage
+          breakfast earth  # 替换成你的设备代号（比如 earth）
+
+      - name: Extract proprietary blobs
+        run: |
+          cd device/xiaomi/earth  # 替换成你的设备路径
+          ./extract-files.py
+
+      - name: Build LineageOS
+        run: |
+          cd ~/android/lineage
+          brunch earth  # 替换成你的设备代号
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lineage-build
+          path: ~/android/lineage/out/target/product/earth/*.zip
+- name: Set up ccache
+  run: |
+    apt install -y ccache
+    echo "export USE_CCACHE=1" >> ~/.bashrc
+    echo "export CCACHE_DIR=~/.ccache" >> ~/.bashrc
+    source ~/.bashrc
+    ccache -M 50G
+- name: Cache ccache
+  uses: actions/cache@v4
+  with:
+    path: ~/.ccache
+    key: ${{ runner.os }}-ccache-${{ hashFiles('**/*.mk') }}
+    restore-keys: |
+      ${{ runner.os }}-ccache-
