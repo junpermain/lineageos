@@ -31,7 +31,8 @@ jobs:
       - name: Init Chromium manifest
         run: |
           cd ~/chromium-android
-          repo init -u https://chromium.googlesource.com/chromium/manifest.git --depth 1
+          fetch --nohooks android
+          repo init https://chromium.googlesource.com/chromium/src --depth 1
 
       - name: Sync Chromium source
         run: |
