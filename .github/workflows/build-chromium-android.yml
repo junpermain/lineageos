@@ -1,0 +1,79 @@
+name: Build Chromium Android APK
+on:
+  workflow_dispatch: # 支持手动触发
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    # 给足够的资源（如果是免费版，可能需要用自托管runner，下面会说明）
+    # 建议配置：16核CPU、32GB内存、500GB SSD
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y git python3 curl unzip lsb-release
+
+      - name: Install depot_tools
+        run: |
+          git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git ~/depot_tools
+          echo "PATH=$HOME/depot_tools:$PATH" >> $GITHUB_ENV
+          echo "umask 002" >> ~/.bashrc
+          source ~/.bashrc
+
+      - name: Check depot_tools
+        run: |
+          gclient --version
+          repo --version
+
+      - name: Create chromium-android directory
+        run: |
+          mkdir -p ~/chromium-android && cd ~/chromium-android
+
+      - name: Init Chromium manifest
+        run: |
+          cd ~/chromium-android
+          repo init -u https://chromium.googlesource.com/chromium/manifest.git --depth 1
+
+      - name: Sync Chromium source
+        run: |
+          cd ~/chromium-android
+          repo sync -j8 # 免费runner资源有限，这里用-j8
+
+      - name: Install Android build dependencies
+        run: |
+          cd ~/chromium-android/src
+          ./build/install-build-deps-android.sh --no-prompt
+
+      - name: Generate GN build config (minimal compile)
+        run: |
+          cd ~/chromium-android/src
+          gn gen out/arm64 --args='
+            target_os="android"
+            target_cpu="arm64"
+            is_official_build=false
+            is_debug=false
+            symbol_level=0
+            enable_nacl=false
+            use_kerberos=false
+            use_alsa=false
+            use_pulseaudio=false
+            use_cups=false
+            use_gtk=false
+            dcheck_always_on=false
+            enable_rust=false
+            use_system_icu=true
+            use_system_libjpeg=true
+            use_system_libpng=true
+            use_system_zlib=true
+          '
+
+      - name: Build Chrome APK
+        run: |
+          cd ~/chromium-android/src
+          autoninja -C out/arm64 chrome_public_apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: ChromePublic.apk
+          path: ~/chromium-android/src/out/arm64/apks/ChromePublic.apk
+          retention-days: 7
