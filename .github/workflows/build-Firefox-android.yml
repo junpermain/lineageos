@@ -1,0 +1,61 @@
+name: Build Firefox for Android APK (Artifact Mode)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout mozilla-central
+        uses: actions/checkout@v4
+        with:
+          repository: mozilla/gecko-dev
+          fetch-depth: 1  # 浅克隆，节省时间和空间
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: 11076708
+
+      - name: Create mozconfig (Artifact Mode)
+        run: |
+          cat > mozconfig << 'EOF'
+          ac_add_options --enable-application=mobile/android
+          ac_add_options --target=aarch64
+          ac_add_options --enable-artifact-builds
+          ac_add_options --with-android-sdk=$ANDROID_HOME
+          EOF
+
+      - name: Bootstrap environment
+        run: |
+          ./mach --no-interactive bootstrap --application-choice="GeckoView/Firefox for Android"
+          
+      - name: Build with mach (downloads prebuilt Gecko)
+        run: |
+          ./mach build
+          ./mach package
+          
+      - name: Build GeckoView AAR
+        run: |
+          ./mach android archive-geckoview
+          
+      - name: Build Fenix APK with Gradle
+        run: |
+          cd mobile/android/fenix
+          ./gradlew assembleDebug
+          
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: firefox-debug-apk
+          path: mobile/android/fenix/app/build/outputs/apk/debug/*.apk
