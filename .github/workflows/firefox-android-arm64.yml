@@ -1,0 +1,62 @@
+name: Firefox Android ARM64 CI
+
+on:
+  workflow_dispatch:    # 手动触发
+  schedule:
+    - cron: '0 6 * * *' # 每天 UTC 6 点同步一次（可选）
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout your repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # 同步 mozilla-central 主线到你的仓库
+      - name: Sync upstream mozilla-central
+        run: |
+          git config --global user.name "CI"
+          git config --global user.email "ci@example.com"
+          git remote add upstream https://github.com/mozilla/gecko-dev.git || true
+          git fetch upstream main
+          git reset --hard upstream/main
+          git push origin main --force
+        shell: bash
+
+      # 系统依赖
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential python3 python3-dev libssl-dev libffi-dev curl unzip zip mercurial openjdk-17-jdk-headless
+
+      # Bootstrap 环境
+      - name: Bootstrap
+        run: |
+          ./mach bootstrap --application-choice="Firefox for Android" --no-interactive
+
+      # 编译配置：只 ARM64，纯本地编译
+      - name: Create .mozconfig
+        run: |
+          cat > .mozconfig <<EOF
+          ac_add_options --target=aarch64-linux-android
+          ac_add_options --disable-artifact-builds
+          ac_add_options --enable-optimize
+          ac_add_options --disable-debug
+          mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-arm64
+          mk_add_options MOZ_MAKE_FLAGS="-j$(nproc)"
+          EOF
+
+      # 核心编译
+      - name: Build Gecko & Fenix
+        run: |
+          ./mach build
+          ./mach gradle fenix:assembleDebug
+
+      # 上传 APK
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: fenix-arm64-debug
+          path: obj-arm64/gradle/build/mobile/android/fenix/outputs/apk/debug/*.apk
